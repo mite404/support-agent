@@ -1,0 +1,3 @@
+{
+  "extends": "@support-agent/config/tsconfig.base.json"
+}
