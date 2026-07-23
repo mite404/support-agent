@@ -6,26 +6,32 @@ import { api } from "@support-agent/backend/convex/_generated/api";
 import { ORDER_STATUSES } from "@support-agent/backend/convex/orderStatus";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 
-// The one order-lookup query the tools call, plus the row it returns. Both are
-// derived from the Convex function reference so this file never restates - and
-// so cannot drift from - the query's real argument and return shapes.
+// The Convex functions the tools call, each with its argument and result shapes
+// derived from the function reference so this file never restates - and so
+// cannot drift from - the real argument and return shapes.
 type OrderStatusQueryArgs = FunctionArgs<typeof api.orders.getStatusFor>;
 type OrderStatusRow = NonNullable<
   FunctionReturnType<typeof api.orders.getStatusFor>
 >;
+type EnqueueMutationArgs = FunctionArgs<typeof api.outbox.enqueue>;
+type EnqueueMutationResult = FunctionReturnType<typeof api.outbox.enqueue>;
 
 /**
- * The slice of `ConvexHttpClient` the support tools depend on: a single `query`
- * specialized to `orders.getStatusFor`. Narrowing the seam here (instead of
- * taking the whole client) keeps it small enough to satisfy with a plain object
- * stub in a unit test, while the real `ConvexHttpClient` - whose `query` is
- * generic - still assigns to it.
+ * The slice of `ConvexHttpClient` the support tools depend on: the one `query`
+ * (`orders.getStatusFor`) and the one `mutation` (`outbox.enqueue`) they call.
+ * Narrowing the seam here (instead of taking the whole client) keeps it small
+ * enough to satisfy with a plain object stub in a unit test, while the real
+ * `ConvexHttpClient` - whose methods are generic - still assigns to it.
  */
 export type SupportConvexClient = {
   query(
     reference: typeof api.orders.getStatusFor,
     args: OrderStatusQueryArgs,
   ): Promise<OrderStatusRow | null>;
+  mutation(
+    reference: typeof api.outbox.enqueue,
+    args: EnqueueMutationArgs,
+  ): Promise<EnqueueMutationResult>;
 };
 
 // What the model passes in: just the order number. Deliberately no customer
@@ -53,6 +59,29 @@ const lookupOrderStatusOutput = v.union([
 export type LookupOrderStatusOutput = v.InferOutput<
   typeof lookupOrderStatusOutput
 >;
+
+// The `id` prefix that marks the WhatsApp lane. `send_reply` sends outbound
+// text and must fire only here: a `web:` session must never text a phone, so
+// the tool gates on this prefix inside `run` before it touches the outbox.
+const WHATSAPP_LANE_PREFIX = "whatsapp:";
+
+// What the model passes to send a reply: just the message text. The recipient
+// and conversation are the closure `id`, never model input - the model can only
+// choose the words, not who they reach.
+const sendReplyInput = v.object({
+  body: v.string(),
+});
+
+// What `send_reply` hands back: the queued message's id, so a follow-up cancel
+// can pull it within the undo window. Reaching this shape at all means the
+// message was enqueued - the lane gate throws instead of returning on refusal.
+const sendReplyOutput = v.object({
+  enqueued: v.literal(true),
+  messageId: v.string(),
+});
+
+/** The shape `send_reply` resolves to once a reply is queued for delivery. */
+export type SendReplyOutput = v.InferOutput<typeof sendReplyOutput>;
 
 // Process-wide Convex client the tools close over. Held lazily so importing this
 // module (e.g. a unit test that injects its own stub) never needs a live URL.
@@ -102,6 +131,10 @@ function toLookupOrderStatusOutput(
  * into one scope. Resolving `id` to a shared customer record is a later,
  * context-only step and does not change this boundary.
  *
+ * `send_reply` is further lane-gated: it derives the WhatsApp recipient from
+ * `id` and refuses (throws) unless `id` is on the `whatsapp:` lane, so a web
+ * session can never text a phone.
+ *
  * @param id - the conversation key, e.g. `web:<userId>` or `whatsapp:+1...`.
  * @param client - Convex client to query through; defaults to the process-wide one.
  * @returns the tool definitions this conversation exposes to the model.
@@ -125,5 +158,39 @@ export function createSupportTools(
     },
   });
 
-  return [lookupOrderStatus];
+  const sendReply = defineTool({
+    name: "send_reply",
+    description:
+      "Send an outbound text reply to the customer on WhatsApp. Only available in a WhatsApp conversation; the message is delivered after a 5 second undo window.",
+    input: sendReplyInput,
+    output: sendReplyOutput,
+    run: async ({ input }): Promise<SendReplyOutput> => {
+      // Lane gate: authorization lives in `run`, not the schema. A browser
+      // session (`web:...`) must never text a phone, so refuse before any I/O.
+      if (!id.startsWith(WHATSAPP_LANE_PREFIX)) {
+        throw new Error(
+          `send_reply is only available on the WhatsApp lane; refusing to send from "${id}".`,
+        );
+      }
+      // Enqueue rather than send: the message waits out a durable 5s undo
+      // window in Convex (survives restarts) before delivery. The recipient and
+      // conversation are the closure `id` - the WhatsApp lane's `id` is already
+      // the Twilio `whatsapp:+1...` address.
+      const messageId = await client.mutation(api.outbox.enqueue, {
+        conversationKey: id,
+        to: id,
+        body: input.body,
+      });
+      return { enqueued: true, messageId };
+    },
+  });
+
+  // A tuple (not a widened array) so each position keeps its own tool type -
+  // callers and tests see `lookup_order_status`'s input shape distinctly from
+  // `send_reply`'s, instead of a union that collapses both `run` signatures.
+  const tools: [typeof lookupOrderStatus, typeof sendReply] = [
+    lookupOrderStatus,
+    sendReply,
+  ];
+  return tools;
 }

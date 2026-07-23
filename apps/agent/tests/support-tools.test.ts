@@ -12,14 +12,20 @@ const shippedOrder = {
   updatedAt: 1_700_000_000_000,
 } as const;
 
-/** Build the single tool under test wired to a stubbed Convex client. */
-function makeLookupTool(id: string, queryResult: unknown) {
+// Build both tools wired to stubbed Convex query + mutation. Destructuring the
+// factory's tuple keeps each tool's `run` input shape distinct, so calling
+// `run` typechecks against that tool's own schema.
+function makeTools(id: string, queryResult: unknown, mutationResult: unknown) {
   const query = vi.fn().mockResolvedValue(queryResult);
-  const client: SupportConvexClient = { query };
-  const lookupOrderStatus = createSupportTools(id, client)[0];
-  if (lookupOrderStatus === undefined) {
-    throw new Error("expected createSupportTools to expose lookup_order_status");
-  }
+  const mutation = vi.fn().mockResolvedValue(mutationResult);
+  const client: SupportConvexClient = { query, mutation };
+  const [lookupOrderStatus, sendReply] = createSupportTools(id, client);
+  return { lookupOrderStatus, sendReply, query, mutation };
+}
+
+/** Build just the lookup tool wired to a stubbed Convex client. */
+function makeLookupTool(id: string, queryResult: unknown) {
+  const { lookupOrderStatus, query } = makeTools(id, queryResult, null);
   return { lookupOrderStatus, query };
 }
 
@@ -57,5 +63,43 @@ describe("createSupportTools / lookup_order_status", () => {
     });
 
     expect(result).toEqual({ found: false });
+  });
+});
+
+describe("createSupportTools / send_reply", () => {
+  it("exposes the two tools in a stable order", () => {
+    const { lookupOrderStatus, sendReply } = makeTools("web:user_42", null, null);
+
+    expect(lookupOrderStatus.name).toBe("lookup_order_status");
+    expect(sendReply.name).toBe("send_reply");
+  });
+
+  it("refuses to send from a non-WhatsApp lane and never touches the outbox", async () => {
+    const { sendReply, mutation } = makeTools("web:user_42", null, "msg_1");
+
+    await expect(
+      sendReply.run({ input: { body: "hello from the web" } }),
+    ).rejects.toThrow(/whatsapp/iu);
+    expect(mutation).not.toHaveBeenCalled();
+  });
+
+  it("enqueues to the outbox scoped to the closure id and returns the message id", async () => {
+    const { sendReply, mutation } = makeTools(
+      "whatsapp:+15550001111",
+      null,
+      "outbox_7",
+    );
+
+    const result = await sendReply.run({
+      input: { body: "Your order has shipped." },
+    });
+
+    expect(mutation).toHaveBeenCalledTimes(1);
+    expect(mutation).toHaveBeenCalledWith(api.outbox.enqueue, {
+      conversationKey: "whatsapp:+15550001111",
+      to: "whatsapp:+15550001111",
+      body: "Your order has shipped.",
+    });
+    expect(result).toEqual({ enqueued: true, messageId: "outbox_7" });
   });
 });
