@@ -13,7 +13,11 @@ import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as orderStatus from "../orderStatus.js";
 import type * as orders from "../orders.js";
+import type * as outbox from "../outbox.js";
+import type * as outboxStatus from "../outboxStatus.js";
 import type * as privateData from "../privateData.js";
+import type * as ticketStatus from "../ticketStatus.js";
+import type * as tickets from "../tickets.js";
 
 import type {
   ApiFromModules,
@@ -27,7 +31,11 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   orderStatus: typeof orderStatus;
   orders: typeof orders;
+  outbox: typeof outbox;
+  outboxStatus: typeof outboxStatus;
   privateData: typeof privateData;
+  ticketStatus: typeof ticketStatus;
+  tickets: typeof tickets;
 }>;
 
 /**
