@@ -10,10 +10,12 @@ export const env = createEnv({
   client: {
     NEXT_PUBLIC_CONVEX_URL: convexUrlSchema("example.convex.cloud"),
     NEXT_PUBLIC_CONVEX_SITE_URL: convexUrlSchema("example.convex.site"),
+    NEXT_PUBLIC_FLUE_BASE_URL: z.url().default("http://localhost:3000"),
   },
   runtimeEnv: {
     NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL,
     NEXT_PUBLIC_CONVEX_SITE_URL: process.env.NEXT_PUBLIC_CONVEX_SITE_URL,
+    NEXT_PUBLIC_FLUE_BASE_URL: process.env.NEXT_PUBLIC_FLUE_BASE_URL,
   },
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,
   emptyStringAsUndefined: true,
