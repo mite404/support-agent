@@ -1,0 +1,75 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+
+  // Plugins scope which rule sets are active. typescript + react + jsx-a11y
+  // match this stack (Next/React/TS); import catches module-graph mistakes;
+  // unicorn/oxc add modern-JS correctness rules.
+  "plugins": ["typescript", "react", "jsx-a11y", "import", "unicorn", "oxc"],
+
+  // Categories set a baseline severity for whole rule groups.
+  //   correctness = almost-certainly-a-bug        -> block (error)
+  //   suspicious  = probably-a-mistake            -> block (error)
+  //   pedantic    = stricter, teaches better TS   -> warn (won't block commits)
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "warn"
+  },
+
+  "env": { "browser": true, "node": true, "es2024": true },
+
+  // Hand-picked rules: the ones that build intermediate->advanced TS habits.
+  // Bumped to "error" where the habit is durable and worth enforcing.
+  "rules": {
+    // No `any`. Forces you to actually type the boundary - the single biggest
+    // step from intermediate to advanced TS.
+    "typescript/no-explicit-any": "error",
+
+    // `import type { X }` for type-only imports. Teaches the value/type split,
+    // and it's what keeps bundlers from emitting dead runtime imports.
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-import-type-side-effects": "warn",
+    "import/consistent-type-specifier-style": "warn",
+
+    // `as const` over widened literals -> literal & tuple types.
+    "typescript/prefer-as-const": "error",
+
+    // `===` / `!==` only. No coercion surprises.
+    "eqeqeq": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+
+    // Narrow with a guard instead of asserting `x!` - warn, since `!` is
+    // occasionally legitimate and worth a conscious override.
+    "typescript/no-non-null-assertion": "warn",
+
+    // Don't annotate what TS already infers (`const n: number = 1`).
+    "typescript/no-inferrable-types": "warn",
+
+    // `@ts-expect-error` (which fails when the error is gone) over `@ts-ignore`.
+    "typescript/ban-ts-comment": "warn",
+
+    // Consistency choices that expose real TS concepts:
+    "typescript/array-type": "warn",                    // T[] vs Array<T>
+    "typescript/consistent-indexed-object-style": "warn", // Record<K,V> vs { [k]: V }
+    "typescript/prefer-function-type": "warn",           // call-sig interface -> function type
+
+    // --- Turned OFF: false positives for a modern Next.js app ---
+    // React 17+ automatic JSX transform means `import React` is NOT needed.
+    // eslint-config-next disables this too; keeping it on flags every element.
+    "react/react-in-jsx-scope": "off",
+    // `import "./globals.css"` is a required side-effect import in Next.
+    "import/no-unassigned-import": "off",
+    // 50-line cap is wrong for React components/forms; too noisy to teach with.
+    "max-lines-per-function": "off"
+  },
+
+  // Never lint machine-generated or build output.
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.next/**",
+    "**/.turbo/**",
+    "**/_generated/**"
+  ]
+}
