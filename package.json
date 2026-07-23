@@ -29,6 +29,7 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "check-types": "turbo run check-types",
+    "test": "turbo run test",
     "dev:web": "turbo run dev -F web",
     "dev:server": "turbo run dev -F @support-agent/backend",
     "dev:setup": "turbo run dev:setup -F @support-agent/backend",
@@ -50,7 +51,8 @@
     "oxfmt": "^0.60.0",
     "oxlint": "^1.75.0",
     "turbo": "^2.10.2",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.1.10"
   },
   "lint-staged": {
     "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}": "oxlint --no-error-on-unmatched-pattern"
