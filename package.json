@@ -58,7 +58,10 @@
     "vitest": "^4.1.10"
   },
   "lint-staged": {
-    "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}": "oxlint --no-error-on-unmatched-pattern",
+    "**/*.{js,mjs,cjs,jsx,ts,mts,cts,tsx}": [
+      "oxfmt",
+      "oxlint --no-error-on-unmatched-pattern"
+    ],
     "packages/backend/convex/**/*.ts": "eslint --no-warn-ignored"
   },
   "packageManager": "bun@1.3.14"

@@ -1,1 +1,13 @@
 lint-staged
+
+# Deterministic markdown line-wrap to <=100 columns (no LLM, offline).
+# References the single global script so nothing is copied per project; skips
+# cleanly if the script is absent (e.g. a fresh clone on another machine).
+WRAP_MD="$HOME/.config/zed/scripts/wrap-md.js"
+if [ -f "$WRAP_MD" ]; then
+  staged_md=$(git diff --cached --name-only --diff-filter=ACM -- '*.md')
+  if [ -n "$staged_md" ]; then
+    echo "$staged_md" | xargs bun "$WRAP_MD"
+    echo "$staged_md" | xargs git add
+  fi
+fi
