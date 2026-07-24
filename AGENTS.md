@@ -23,26 +23,39 @@ These are common instructions for Ethan's agents across all scenarios.
 - Never use the em dash "--". Use plain dash "-" instead.
 - When writing commit messages never auto-add your agent name as co-author.
 - Never manually modify changelog.md files or any files that are marked as auto-generated.
-- When writing or substantially editing long Markdown files, put each full sentence on its own line.
-  Preserve normal Markdown structure but avoid wrapping multiple sentences onto one physical line.
+- When writing or editing Markdown files, keep every physical line at or under 100 columns, wrapping
+  longer lines at word boundaries.
+  A pre-commit hook enforces this deterministically (`.husky/pre-commit` runs the global `wrap-md`
+  script), leaving code fences, tables, and headings intact - so this is the rule to follow, not
+  one-sentence-per-line.
 - When making technical decisions, do not give much weight to development cost.
   Instead prefer quality, simplicity, robustness, scalability, and long-term maintainability.
   "Development cost" here means a human-scale effort estimate.
-  Do not let reasoning like "a human would spend two days on this, so patch it" justify a flimsier choice, because an agent writes and revises code far faster than that estimate assumes.
+  Do not let reasoning like "a human would spend two days on this, so patch it" justify a flimsier
+  choice, because an agent writes and revises code far faster than that estimate assumes.
   Effort is cheap; correctness and longevity are not.
-- When doing bug fixes, always start with reproducing the bug in an E2E setting as closely aligned with how the end user uses the product.
+- When doing bug fixes, always start with reproducing the bug in an E2E setting as closely aligned
+  with how the end user uses the product.
   This makes sure you find the real problem so your fix will actually solve it.
-- When end-to-end testing a product, be picky about the UI you see and be obsessed with pixel perfection.
-  If something clearly looks off, even if it is not directly related to what you are doing, try to get it fixed.
+- When end-to-end testing a product, be picky about the UI you see and be obsessed with pixel
+  perfection.
+  If something clearly looks off, even if it is not directly related to what you are doing, try to
+  get it fixed.
 - Apply the same high standard to engineering excellence: lint, test failures, and test flakiness.
   If you see one, even if it is not caused by what you are working on right now, still get it fixed.
-- Let's always work with atomic commits. Each commit should tell part of a story working to build a feature or fix a bug.
+- Let's always work with atomic commits. Each commit should tell part of a story working to build a
+  feature or fix a bug.
   One commit with hundreds or thousands of lines of code changes is hard for anyone to track.
-- Always opt for writing files in the same way: imports, variable declarations, prep data to work with, helper fns / pure fns, the main orchestration at the bottom.
-  Work leafs to root and follow the functional programming principles from Grokking Simplicity: data, calculations, actions.
-- Public/exported functions and interface members get JSDoc (`/** */`) so editor tooltips carry the contract.
-  Include `@throws` wherever the function throws, and `@param`/`@returns` only where they say something the type does not.
-  Do not JSDoc private helpers or pure data-shape types - leave those as `//` comments; restating a type in JSDoc just invites drift.
+- Always opt for writing files in the same way: imports, variable declarations, prep data to work
+  with, helper fns / pure fns, the main orchestration at the bottom.
+  Work leafs to root and follow the functional programming principles from Grokking Simplicity:
+  data, calculations, actions.
+- Public/exported functions and interface members get JSDoc (`/** */`) so editor tooltips carry the
+  contract.
+  Include `@throws` wherever the function throws, and `@param`/`@returns` only where they say
+  something the type does not.
+  Do not JSDoc private helpers or pure data-shape types - leave those as `//` comments; restating a
+  type in JSDoc just invites drift.
 
 ---
 

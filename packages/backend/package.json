@@ -18,8 +18,11 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@support-agent/config": "workspace:*",
     "@types/node": "^24.3.0",
-    "typescript": "catalog:"
+    "convex-test": "^0.0.54",
+    "typescript": "catalog:",
+    "vite": "^8.1.5"
   }
 }
