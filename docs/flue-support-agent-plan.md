@@ -160,9 +160,19 @@ Each tool is `defineTool({ name, description, input, output, run })`.
 
 **Rejected alternative:** one unified session keyed by resolved customer identity. Rejected because (1) an unverified inbound phone number can't be safely bound to a web account without a separate verification step — a shared key leaks one channel's session into the other; (2) a merged session would carry the WhatsApp-bound `send_reply` into a web chat; the lane prefix in `id` is exactly what lets `send_reply` gate itself. This is the paragraph Sierra would actually ask for (decision · alternative · why).
 
-## Web UI — reuse, build nothing new
+## Web UI — steel thread first, shadcn preset second
 
-`packages/ui` already exports the chat surface (`bubble.tsx`, `message.tsx`, `message-scroller.tsx`, `attachment.tsx`, `marker.tsx`). New files only: `apps/web/src/app/support/page.tsx` + a `Chat.tsx` that composes them, wired to `@flue/react`'s `useFlueAgent({ name:'support-assistant', id })` inside a `FlueProvider` (mirroring the existing `providers.tsx` pattern). Map `agent.messages[].parts` → `Message`/`Bubble` (user `align="end"`, assistant `align="start"`). Zero new primitives.
+Built in two phases.
+
+**Phase 1 (steel thread, already built + being tested):** `packages/ui` already exports the chat surface (`bubble.tsx`, `message.tsx`, `message-scroller.tsx`, `attachment.tsx`, `marker.tsx`), and `apps/web/src/app/support/` already has `page.tsx` + `Chat.tsx` composing them, wired to `@flue/react`'s `useFlueAgent({ name:'support-assistant', id })` inside a `FlueProvider` (mirroring the existing `providers.tsx` pattern). It maps `agent.messages[].parts` -> `Message`/`Bubble` (user `align="end"`, assistant `align="start"`). This is what the durability plan wires and render-tests; no new primitives at this stage.
+
+**Phase 2 (shadcn preset rebuild, later separate commit):** apply the chosen shadcn preset, then rip the richer chat composition (sidebar, skeleton, toast, richer message/bubble states) from `ai-chatbot-new` and `pm-interview-dashboard-main`. The render tests from phase 1 guard the swap.
+
+```sh
+bunx --bun shadcn@latest apply --preset b2aBcY9IDw
+```
+
+Preset covers: bubble, message, message-scroller, skeleton, toast, sidebar.
 
 ## Build sequence — STEEL THREAD (each step = 1 commit = 1 video chapter)
 
