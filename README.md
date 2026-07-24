@@ -1,92 +1,122 @@
 # support-agent
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Next.js, Convex, and more.
+A multi-channel e-commerce customer support agent built on [Flue](https://github.com/withastro/flue), the Astro team's agent framework.
+One agent answers order-status questions over two doors: a **web chat** surface and a **WhatsApp** lane (via Twilio).
+The design's load-bearing idea is trust: the agent never invents an order status, and any outbound message to a real customer passes a guarded, cancellable send.
 
-## Features
+## Architecture
 
-- **TypeScript** - For type safety and improved developer experience
-- **Next.js** - Full-stack React framework
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
-- **Convex** - Reactive backend-as-a-service platform
-- **Authentication** - Better-Auth
-- **Husky** - Git hooks for code quality
-- **Turborepo** - Optimized monorepo build system
+Two doors, one agent, one durable session per conversation.
 
-## Getting Started
+```
+Web browser  ──POST/GET /agents/support-assistant/:id──►  route (web lane only)  ─┐
+                                                                                  ├─►  defineAgent(id)  ──►  tools  ──►  Convex
+WhatsApp  ──Twilio webhook──►  channel dispatch (id = whatsapp:+1…)  ─────────────┘        │                            (orders, tickets, outbox)
+                                                                                    lookup_order_status
+                                                                                    send_reply (WhatsApp lane only, +5s undo)
+```
 
-First, install the dependencies:
+- **Two lanes, one agent.** A web visitor is `id = web:<userId>`; a WhatsApp sender is `id = whatsapp:+1…`.
+  Each `id` is its own session; the two are correlated in Convex for context but never merged.
+- **Authorization lives in `run`, not the schema.** Valibot validates a tool's shape; whether this caller may act is decided inside the tool from the closure `id`.
+- **`send_reply` is guarded.** It only works on the WhatsApp lane, and it enqueues to an `outbox` with a 5-second cancellable delay (durable in Convex, not an in-process timer).
+
+## Monorepo structure
+
+```
+support-agent/
+├── apps/
+│   ├── web/          # Next.js 16 frontend; the /support chat surface
+│   └── agent/        # The Flue agent: defineAgent, tools, HTTP route
+├── packages/
+│   ├── backend/      # Convex backend: schema + functions
+│   ├── ui/           # Shared shadcn/base-ui primitives
+│   ├── env/          # Typed environment validation (t3-env + Zod)
+│   └── config/       # Shared TS / tooling config
+```
+
+The agent's own code:
+
+```
+apps/agent/src/
+├── agents/support-assistant.ts   # defineAgent + the web-lane HTTP route
+└── shared/support-tools.ts       # createSupportTools(id): the tools + in-run authz
+```
+
+## Convex data model (`packages/backend/convex`)
+
+| Table | Purpose |
+|-------|---------|
+| `orders` | What customers ask about; `getStatusFor` looks one up, scoped to the caller. |
+| `customers` | Correlates the two channel lanes for context (never merges sessions). |
+| `tickets` | One support case per conversation (`open` → `needs_human` → `resolved`). |
+| `outbox` | Where the 5-second undo-send lives; a scheduler delivers or a cancel stops it. |
+
+## Tech stack
+
+- **Runtime / package manager:** Bun
+- **Monorepo:** Turborepo (`turbo` orchestrates scripts across every package)
+- **Agent framework:** Flue (`@flue/runtime`), tools typed with **Valibot**
+- **Frontend:** Next.js 16, React 19, Tailwind CSS v4
+- **Backend:** Convex (reactive), Better-Auth
+- **Lint / format:** oxlint + oxfmt
+- **Tests:** Vitest
+
+## Getting started
+
+Install dependencies (run this on your own machine even if a container already installed them - native binaries differ per platform):
 
 ```bash
 bun install
 ```
 
-## Convex Setup
-
-This project uses Convex as a backend. You'll need to set up Convex before running the app:
+Set up Convex (creates/links a deployment and writes `CONVEX_DEPLOYMENT`):
 
 ```bash
 bun run dev:setup
 ```
 
-Follow the prompts to create a new Convex project and connect it to your application.
+Then set the server-side secrets into the Convex deployment (not a local file - Convex functions run in the cloud):
 
-Copy environment variables from `packages/backend/.env.local` to `apps/*/.env`.
+```bash
+cd packages/backend
+npx convex env set BETTER_AUTH_SECRET "$(openssl rand -base64 32)"
+npx convex env set SITE_URL "http://localhost:3001"
+```
 
-Then, run the development server:
+Confirm `apps/web/.env` has your real Convex URLs (not the `example.convex.cloud` placeholders).
+
+Run the web app + Convex together:
 
 ```bash
 bun run dev
 ```
 
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
-Your app will connect to the Convex cloud backend automatically.
+Open [http://localhost:3001/support](http://localhost:3001/support).
 
-## UI Customization
+## Scripts
 
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
+| Command | Does |
+|---------|------|
+| `bun run dev` | Start every package's dev server (web on 3001, Convex dev) |
+| `bun run dev:web` | Web app only |
+| `bun run dev:server` | Convex backend only |
+| `bun run build` | Build all packages |
+| `bun run lint` | oxlint across the repo |
+| `bun run check-types` | `tsc --noEmit` in every package |
+| `bun run test` | Vitest across every package |
 
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
+Never call `turbo` directly - it is a project dependency, not a global command.
+`bun run <script>` invokes the local copy.
 
-### Add more shared components
+## Status
 
-Run this from the project root to add more primitives to the shared UI package:
+**Working now**
+- Web lane: the `/support` page, the HTTP `route` (web-lane-only), the agent definition, and the tools.
+- Convex data layer: `orders`, `tickets`, `outbox` with their functions, unit-tested.
+- The guarded `send_reply` (lane gate + 5-second cancellable outbox), unit-tested.
 
-```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
-```
-
-Import shared components like this:
-
-```tsx
-import { Button } from "@support-agent/ui/components/button";
-```
-
-### Add app-specific blocks
-
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
-
-## Git Hooks and Formatting
-
-- Initialize hooks: `bun run prepare`
-
-## Project Structure
-
-```
-support-agent/
-├── apps/
-│   ├── web/         # Frontend application (Next.js)
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── backend/     # Convex backend functions and schema
-```
-
-## Available Scripts
-
-- `bun run dev`: Start all applications in development mode
-- `bun run build`: Build all applications
-- `bun run dev:web`: Start only the web application
-- `bun run dev:setup`: Setup and configure your Convex project
-- `bun run check-types`: Check TypeScript types across all apps
+**Next steps (not yet wired)**
+- The inbound WhatsApp channel (`apps/agent/src/channels/twilio.ts`) that dispatches Twilio webhooks to `id = whatsapp:+1…`.
+- A live-run script for the agent (`flue dev` / `flue run`); today the agent is defined and unit-tested, not run against a model here.
+- Deployment: the Flue agent needs a long-lived host (Railway/Fly or Cloudflare Durable Objects), the web app goes to Vercel, and Convex is already cloud.

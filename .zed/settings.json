@@ -11,6 +11,11 @@
         }
       }
     },
+    "eslint": {
+      "settings": {
+        "codeActionOnSave": { "enable": false }
+      }
+    },
     "oxfmt": {
       "initialization_options": {
         "settings": {

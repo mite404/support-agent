@@ -7,7 +7,18 @@ import type { DataModel } from "./_generated/dataModel";
 import { query } from "./_generated/server";
 import authConfig from "./auth.config";
 
-const siteUrl = process.env.SITE_URL!;
+// Reads a required deployment env var, failing loud if it is unset. Returns
+// `string` (not `string | undefined`), so callers - including nested closures
+// like createAuth - see a defined value without a non-null assertion.
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`${name} is not set in the Convex deployment environment.`);
+  }
+  return value;
+}
+
+const siteUrl = requireEnv("SITE_URL");
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
