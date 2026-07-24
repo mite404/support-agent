@@ -5,7 +5,7 @@ import { query } from "./_generated/server";
 export const get = query({
   args: {},
   returns: v.string(),
-  handler: async () => {
+  handler: () => {
     return "OK";
   },
 });

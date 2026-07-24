@@ -57,7 +57,7 @@ export const cancel = mutation({
 export const deliver = internalAction({
   args: { messageId: v.id("outbox") },
   returns: v.null(),
-  handler: async () => {
+  handler: () => {
     return null;
   },
 });
