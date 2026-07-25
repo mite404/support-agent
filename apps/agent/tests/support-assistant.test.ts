@@ -42,7 +42,7 @@ describe("support-assistant / isHttpLaneAuthorized", () => {
 });
 
 describe("support-assistant / definition", () => {
-  it("wires the model, instructions, and both id-scoped support tools", async () => {
+  it("wires the model, instructions, and every id-scoped support tool", async () => {
     const config = await supportAssistant.initialize({
       id: "web:user_42",
       env: {},
@@ -51,6 +51,11 @@ describe("support-assistant / definition", () => {
     expect(config.model).toBe("openrouter/moonshotai/kimi-k2.6");
     expect(config.instructions).toContain("Never invent");
     expect(config.description).toBe(description);
-    expect(config.tools?.map((tool) => tool.name)).toEqual(["lookup_order_status", "send_reply"]);
+    expect(config.tools?.map((tool) => tool.name)).toEqual([
+      "lookup_order_status",
+      "send_reply",
+      "create_ticket",
+      "message_a_human",
+    ]);
   });
 });

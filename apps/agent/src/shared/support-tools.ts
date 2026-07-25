@@ -5,23 +5,26 @@ import * as v from "valibot";
 import { api } from "@support-agent/backend/convex/_generated/api";
 import { ORDER_STATUSES } from "@support-agent/backend/convex/orderStatus";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
+import { createEscalationTools } from "./escalation-tools";
+import type { EscalationConvexClient } from "./escalation-tools";
 
 // The Convex functions the tools call, each with its argument and result shapes
 // derived from the function reference so this file never restates - and so
 // cannot drift from - the real argument and return shapes.
 type OrderStatusQueryArgs = FunctionArgs<typeof api.orders.getStatusFor>;
-type OrderStatusRow = NonNullable<
-  FunctionReturnType<typeof api.orders.getStatusFor>
->;
+type OrderStatusRow = NonNullable<FunctionReturnType<typeof api.orders.getStatusFor>>;
 type EnqueueMutationArgs = FunctionArgs<typeof api.outbox.enqueue>;
 type EnqueueMutationResult = FunctionReturnType<typeof api.outbox.enqueue>;
 
 /**
  * The slice of `ConvexHttpClient` the support tools depend on: the one `query`
- * (`orders.getStatusFor`) and the one `mutation` (`outbox.enqueue`) they call.
- * Narrowing the seam here (instead of taking the whole client) keeps it small
- * enough to satisfy with a plain object stub in a unit test, while the real
- * `ConvexHttpClient` - whose methods are generic - still assigns to it.
+ * (`orders.getStatusFor`), the one outbox `mutation` (`outbox.enqueue`), and the
+ * ticket mutations behind {@link EscalationConvexClient}. Narrowing the seam
+ * here (instead of taking the whole client) keeps it small enough to satisfy
+ * with a plain object stub in a unit test, while the real `ConvexHttpClient` -
+ * whose methods are generic - still assigns to it. The intersection reads as one
+ * set of `mutation` overloads, so passing the wrong argument shape for a given
+ * function reference is a type error at the call site.
  */
 export type SupportConvexClient = {
   query(
@@ -32,7 +35,7 @@ export type SupportConvexClient = {
     reference: typeof api.outbox.enqueue,
     args: EnqueueMutationArgs,
   ): Promise<EnqueueMutationResult>;
-};
+} & EscalationConvexClient;
 
 // What the model passes in: just the order number. Deliberately no customer
 // field - the caller's identity comes from the closure, never the model.
@@ -56,9 +59,7 @@ const lookupOrderStatusOutput = v.union([
 ]);
 
 /** The shape `lookup_order_status` resolves to - a miss or a fully described order. */
-export type LookupOrderStatusOutput = v.InferOutput<
-  typeof lookupOrderStatusOutput
->;
+export type LookupOrderStatusOutput = v.InferOutput<typeof lookupOrderStatusOutput>;
 
 // The `id` prefix that marks the WhatsApp lane. `send_reply` sends outbound
 // text and must fire only here: a `web:` session must never text a phone, so
@@ -110,9 +111,7 @@ function moduleConvexClient(): ConvexHttpClient {
 // Fold the query result into the tool's output shape: `null` (unknown order, or
 // one owned by another customer) becomes the explicit `found: false` miss. Pure
 // calculation - no I/O - so the mapping is exercised by unit tests directly.
-function toLookupOrderStatusOutput(
-  row: OrderStatusRow | null,
-): LookupOrderStatusOutput {
+function toLookupOrderStatusOutput(row: OrderStatusRow | null): LookupOrderStatusOutput {
   if (row === null) {
     return { found: false };
   }
@@ -133,16 +132,15 @@ function toLookupOrderStatusOutput(
  *
  * `send_reply` is further lane-gated: it derives the WhatsApp recipient from
  * `id` and refuses (throws) unless `id` is on the `whatsapp:` lane, so a web
- * session can never text a phone.
+ * session can never text a phone. The two escalation tools are not lane-gated -
+ * a case is worth logging on either lane - but they take no ticket id from the
+ * model, so a session can only ever touch a ticket it has just filed itself.
  *
  * @param id - the conversation key, e.g. `web:<userId>` or `whatsapp:+1...`.
  * @param client - Convex client to query through; defaults to the process-wide one.
  * @returns the tool definitions this conversation exposes to the model.
  */
-export function createSupportTools(
-  id: string,
-  client: SupportConvexClient = moduleConvexClient(),
-) {
+export function createSupportTools(id: string, client: SupportConvexClient = moduleConvexClient()) {
   const lookupOrderStatus = defineTool({
     name: "lookup_order_status",
     description:
@@ -185,12 +183,19 @@ export function createSupportTools(
     },
   });
 
+  // The escalation pair lives in its own module: it is a distinct capability
+  // with its own Convex slice, and keeping it there is what lets each file stay
+  // small enough to read in one sitting.
+  const [createTicket, messageAHuman] = createEscalationTools(id, client);
+
   // A tuple (not a widened array) so each position keeps its own tool type -
   // callers and tests see `lookup_order_status`'s input shape distinctly from
-  // `send_reply`'s, instead of a union that collapses both `run` signatures.
-  const tools: [typeof lookupOrderStatus, typeof sendReply] = [
-    lookupOrderStatus,
-    sendReply,
-  ];
+  // `send_reply`'s, instead of a union that collapses every `run` signature.
+  const tools: [
+    typeof lookupOrderStatus,
+    typeof sendReply,
+    typeof createTicket,
+    typeof messageAHuman,
+  ] = [lookupOrderStatus, sendReply, createTicket, messageAHuman];
   return tools;
 }
