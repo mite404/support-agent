@@ -105,6 +105,17 @@ function toUsageSummary(response: AgentPromptResponse): UsageSummary {
   };
 }
 
+// Ids the conversation already held that this harness did not put there, i.e.
+// turns left by an earlier eval run against the same still-running server.
+//
+// These are worse than untidy. The model answers with them in context, so an
+// agent asked "where is order #9999" a second time reasonably replies from
+// memory without looking anything up - failing a trajectory assertion that is
+// exactly right on a clean conversation. Naming that beats failing cryptically.
+function foreignMessageIds(recorded: Set<string>, produced: Set<string>): string[] {
+  return [...recorded].filter((id) => !produced.has(id));
+}
+
 // The messages an instance's conversation already holds, read before the prompt
 // so the transcript below can be narrowed to the turn this case produced. A
 // pinned `instanceId` keeps one conversation across cases and across eval runs,
@@ -142,6 +153,9 @@ async function readRecordedMessageIds(
  * harness that deliberately reuses an instance.
  *
  * @param options - which agent to drive and how to reach it.
+ * @throws If a pinned instance's conversation already holds messages this
+ * harness did not produce, since the case would then be graded with an earlier
+ * eval run's turns in the model's context.
  */
 export function createFlueAgentHarness(options: FlueAgentHarnessOptions) {
   const client = createFlueClient({
@@ -150,16 +164,24 @@ export function createFlueAgentHarness(options: FlueAgentHarnessOptions) {
     headers: options.headers,
   });
 
+  // Every message this harness has watched land, across all of its cases. What
+  // is in the conversation but not in here came from somewhere else.
+  const produced = new Set<string>();
+
   return createHarness<string, string>({
     name: `flue-${options.agentName}-agent`,
     run: async ({ input, signal }) => {
       const instanceId = options.instanceId ?? `eval-${crypto.randomUUID()}`;
-      const carriedOver = await readRecordedMessageIds(
-        client,
-        options.agentName,
-        instanceId,
-        signal,
-      );
+      const recorded = await readRecordedMessageIds(client, options.agentName, instanceId, signal);
+      const foreign = foreignMessageIds(recorded, produced);
+      if (foreign.length > 0) {
+        throw new Error(
+          `Agent instance "${instanceId}" already holds ${foreign.length} message(s) from an ` +
+            `earlier eval run, so this case would be graded with another run's turns in the ` +
+            `model's context. Restart the agent - a dev server keeps its conversations per ` +
+            `process - then run the evals again.`,
+        );
+      }
       // The awaited prompt settles only once its canonical conversation records
       // are persisted, so the history read below sees the completed turn.
       const invocation = await client.agents.prompt(options.agentName, instanceId, {
@@ -169,7 +191,8 @@ export function createFlueAgentHarness(options: FlueAgentHarnessOptions) {
       const history = await client.agents.history(options.agentName, instanceId, {
         signal,
       });
-      const turn = history.messages.filter((message) => !carriedOver.has(message.id));
+      const turn = history.messages.filter((message) => !recorded.has(message.id));
+      for (const message of history.messages) produced.add(message.id);
 
       return {
         output: invocation.result.text,
