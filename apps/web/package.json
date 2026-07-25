@@ -33,9 +33,11 @@
   "devDependencies": {
     "@support-agent/config": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^20",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "jsdom": "^29.1.1",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"
   }
