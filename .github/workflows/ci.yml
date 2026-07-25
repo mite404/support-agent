@@ -1,0 +1,167 @@
+name: CI
+
+# The durability gate, split by what it costs to run.
+#
+# `verify` is the offline half - types, lint, unit and integration tests, and a
+# production build. It needs no secrets, so a fork or a pull request from one
+# runs all of it and stays honest.
+#
+# `evals` is the paid half - a real model answering real prompts against the
+# seeded Convex deployment. It only runs where the model key exists, which is
+# why the gate job below exists at all: the `secrets` context is not readable
+# from a job-level `if`, so a job has to turn the secret into an output first.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          # Reads `packageManager` out of the root package.json, so the runner
+          # and every developer stay on one bun without a second place to bump.
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check types
+        run: bun run check-types
+
+      # Not `turbo run lint`. No workspace package declares a `lint` script, so
+      # that command executes zero tasks and still reports success - a gate that
+      # cannot fail. The root script is the actual linter: oxlint across the
+      # repo, then eslint across the Convex folder.
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun run test
+
+      # `next build` validates NEXT_PUBLIC_* when it loads next.config.ts, and
+      # every `.env` is gitignored, so CI supplies its own. These are throwaway
+      # hosts: this job proves the app compiles, it does not produce a
+      # deployable bundle, because a real build inlines the real urls. Supplying
+      # values rather than setting SKIP_ENV_VALIDATION keeps the env schema in
+      # the path, so a newly required variable fails here instead of in prod.
+      - name: Build
+        env:
+          NEXT_PUBLIC_CONVEX_URL: https://ci-placeholder.convex.cloud
+          NEXT_PUBLIC_CONVEX_SITE_URL: https://ci-placeholder.convex.site
+        run: bun run build
+
+  eval-gate:
+    name: eval gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has-model-key: ${{ steps.probe.outputs.has-model-key }}
+    steps:
+      - name: Look for the model key
+        id: probe
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if [ -n "${OPENROUTER_API_KEY}" ]; then
+            echo "has-model-key=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "has-model-key=false" >> "${GITHUB_OUTPUT}"
+            echo "No OPENROUTER_API_KEY reached this run, so the live-model evals were skipped." \
+              >> "${GITHUB_STEP_SUMMARY}"
+          fi
+
+  evals:
+    name: evals (live model)
+    needs: [verify, eval-gate]
+    if: needs.eval-gate.outputs.has-model-key == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # There is no 200 on this path until the agent's first prompt: an
+      # unprompted instance answers 404 `stream_not_found`, and an unauthorized
+      # lane answers 404 `route_not_found`. The body is the health signal, not
+      # the status code. 3583 is both `flue dev`'s default port and the eval
+      # harness's default base url, so neither side needs configuring.
+      AGENT_HISTORY_URL: http://127.0.0.1:3583/agents/support-assistant/web:demo_customer?view=history
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # A fork has neither secret and never reaches this job. Arriving here with
+      # a model key but no deployment url is a misconfigured repository, so it
+      # fails loudly rather than burning a paid call on an agent that cannot
+      # read an order.
+      - name: Require the Convex deployment url
+        env:
+          CONVEX_URL: ${{ secrets.CONVEX_URL }}
+        run: |
+          if [ -z "${CONVEX_URL}" ]; then
+            echo "OPENROUTER_API_KEY is set but CONVEX_URL is not." >&2
+            echo "The support agent reads orders from Convex, so both are required." >&2
+            exit 1
+          fi
+
+      # Both secrets belong to the agent process, not to vitest: the harness
+      # only ever speaks HTTP to this server. `--target node` is required -
+      # there is no flue.config.ts, so the target has no default to fall back
+      # on. A fresh process per job is also what keeps the evals repeatable,
+      # since the dev server holds each conversation in memory for its lifetime.
+      - name: Start the support agent
+        working-directory: apps/agent
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          CONVEX_URL: ${{ secrets.CONVEX_URL }}
+        run: |
+          log="${RUNNER_TEMP}/flue-dev.log"
+          bunx flue dev --target node > "${log}" 2>&1 &
+          echo "AGENT_PID=$!" >> "${GITHUB_ENV}"
+          echo "AGENT_LOG=${log}" >> "${GITHUB_ENV}"
+
+      - name: Wait for the agent to answer
+        run: |
+          for attempt in $(seq 1 60); do
+            body="$(curl -s "${AGENT_HISTORY_URL}" || true)"
+            case "${body}" in
+              *stream_not_found*)
+                echo "agent ready after ${attempt} attempt(s)"
+                exit 0
+                ;;
+            esac
+            sleep 1
+          done
+          echo "the agent never answered on ${AGENT_HISTORY_URL}" >&2
+          exit 1
+
+      - name: Run the evals
+        run: bun run evals
+
+      - name: Show the agent log
+        if: always() && env.AGENT_LOG != ''
+        run: cat "${AGENT_LOG}"
+
+      - name: Stop the agent
+        if: always() && env.AGENT_PID != ''
+        run: kill "${AGENT_PID}" || true
