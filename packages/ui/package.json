@@ -11,7 +11,8 @@
     "./postcss.config": "./postcss.config.mjs"
   },
   "scripts": {
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -31,8 +32,10 @@
   "devDependencies": {
     "@support-agent/config": "workspace:*",
     "@tailwindcss/postcss": "catalog:",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "jsdom": "^29.1.1",
     "tailwindcss": "catalog:",
     "typescript": "catalog:"
   }
