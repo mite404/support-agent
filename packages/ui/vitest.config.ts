@@ -10,5 +10,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "jsdom",
+    // Fills in the one browser API jsdom leaves out that a component in this
+    // package actually calls. See the file for why it is a shim and not a mock.
+    setupFiles: ["./tests/setup.ts"],
   },
 });
