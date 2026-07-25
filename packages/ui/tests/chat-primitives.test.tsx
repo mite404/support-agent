@@ -1,9 +1,21 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, test } from "vitest";
 
-import { Bubble, BubbleContent } from "@support-agent/ui/components/bubble";
+import {
+  Bubble,
+  BubbleContent,
+  BubbleGroup,
+  BubbleReactions,
+} from "@support-agent/ui/components/bubble";
 import { Label } from "@support-agent/ui/components/label";
-import { Message, MessageContent } from "@support-agent/ui/components/message";
+import {
+  Message,
+  MessageAvatar,
+  MessageContent,
+  MessageFooter,
+  MessageGroup,
+  MessageHeader,
+} from "@support-agent/ui/components/message";
 
 // Testing Library only registers its own cleanup when vitest globals are on.
 // They are off here, so unmount between cases explicitly - otherwise an earlier
@@ -55,6 +67,75 @@ describe("Bubble", () => {
     const bubble = screen.getByText("mine").closest<HTMLElement>("[data-slot=bubble]");
     expect(bubble?.dataset.align).toBe("end");
   });
+
+  // Each variant colours the *content* through a descendant selector on the
+  // root (`*:data-[slot=bubble-content]:bg-primary`), so the attribute has to
+  // survive onto the root or every bubble renders unpainted. `Chat.tsx` picks
+  // between "default" and "muted" per speaker; the rest ship for the rebuild.
+  test.each([
+    "default",
+    "secondary",
+    "muted",
+    "tinted",
+    "outline",
+    "ghost",
+    "destructive",
+  ] as const)("publishes the %s variant its content styles select on", (variant) => {
+    render(
+      <Bubble variant={variant}>
+        <BubbleContent>where is order 1234</BubbleContent>
+      </Bubble>,
+    );
+
+    const bubble = screen
+      .getByText("where is order 1234")
+      .closest<HTMLElement>("[data-slot=bubble]");
+    expect(bubble?.dataset.variant).toBe(variant);
+  });
+});
+
+describe("BubbleGroup", () => {
+  // The stacking wrapper `Chat.tsx` puts around each bubble. It holds no state
+  // and takes no provider, so mounting it with its child is the whole contract.
+  test("mounts and stacks its bubbles", () => {
+    const { container } = render(
+      <BubbleGroup>
+        <Bubble>
+          <BubbleContent>first</BubbleContent>
+        </Bubble>
+        <Bubble>
+          <BubbleContent>second</BubbleContent>
+        </Bubble>
+      </BubbleGroup>,
+    );
+
+    expect(container.querySelector("[data-slot=bubble-group]")).not.toBeNull();
+    expect(screen.getByText("first")).toBeDefined();
+    expect(screen.getByText("second")).toBeDefined();
+  });
+});
+
+describe("BubbleReactions", () => {
+  // Positioned absolutely off the bubble's corner, so both attributes are pure
+  // layout inputs (`top-0 -translate-y-3/4` / `right-3`) with no visible text
+  // of their own to fall back on if one goes missing.
+  test.each([
+    ["top", "start"],
+    ["bottom", "end"],
+  ] as const)("mounts on the %s %s corner", (side, align) => {
+    const { container } = render(
+      <Bubble>
+        <BubbleContent>shipped</BubbleContent>
+        <BubbleReactions side={side} align={align}>
+          👍
+        </BubbleReactions>
+      </Bubble>,
+    );
+
+    const reactions = container.querySelector<HTMLElement>("[data-slot=bubble-reactions]");
+    expect(reactions?.dataset.side).toBe(side);
+    expect(reactions?.dataset.align).toBe(align);
+  });
 });
 
 describe("Message", () => {
@@ -66,6 +147,46 @@ describe("Message", () => {
     );
 
     expect(screen.getByText("your order has shipped")).toBeDefined();
+  });
+
+  // The full row: avatar beside a header/content/footer stack, wrapped in the
+  // group that collapses consecutive messages from one speaker. Mounted
+  // together because the parts style each other across the tree - the avatar
+  // shifts up only when a footer exists
+  // (`group-has-data-[slot=message-footer]/message:-translate-y-8`), which is a
+  // relationship no isolated render would exercise.
+  test("mounts every part in one composition", () => {
+    render(
+      <MessageGroup>
+        <Message align="start">
+          <MessageAvatar>SA</MessageAvatar>
+          <MessageContent>
+            <MessageHeader>Support Assistant</MessageHeader>
+            your order has shipped
+            <MessageFooter>2 minutes ago</MessageFooter>
+          </MessageContent>
+        </Message>
+      </MessageGroup>,
+    );
+
+    expect(screen.getByText("Support Assistant")).toBeDefined();
+    expect(screen.getByText("your order has shipped")).toBeDefined();
+    expect(screen.getByText("2 minutes ago")).toBeDefined();
+    expect(screen.getByText("SA")).toBeDefined();
+  });
+
+  // `Chat.tsx` reverses the row for the customer's own messages, and it does so
+  // purely through this attribute (`data-[align=end]:flex-row-reverse`). The
+  // bubble inside then follows the *message's* alignment via
+  // `group-data-[align=end]/message:self-end`, so the two have to agree.
+  test.each(["start", "end"] as const)("records the %s alignment on the row", (align) => {
+    const { container } = render(
+      <Message align={align}>
+        <MessageContent>your order has shipped</MessageContent>
+      </Message>,
+    );
+
+    expect(container.querySelector<HTMLElement>("[data-slot=message]")?.dataset.align).toBe(align);
   });
 });
 
