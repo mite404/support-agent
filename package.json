@@ -30,6 +30,8 @@
     "build": "turbo run build",
     "check-types": "turbo run check-types",
     "test": "turbo run test",
+    "evals": "bun run --cwd apps/agent evals",
+    "evals:json": "bun run --cwd apps/agent evals:json",
     "dev:web": "turbo run dev -F web",
     "dev:server": "turbo run dev -F @support-agent/backend",
     "dev:setup": "turbo run dev:setup -F @support-agent/backend",
