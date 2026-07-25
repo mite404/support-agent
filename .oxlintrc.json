@@ -49,6 +49,11 @@
     // `@ts-expect-error` (which fails when the error is gone) over `@ts-ignore`.
     "typescript/ban-ts-comment": "warn",
 
+    // Convex names its system fields `_id` and `_creationTime`, so reading a
+    // document id is not a private-access smell - it is the documented API.
+    // Everything else keeps the rule.
+    "no-underscore-dangle": ["error", { "allow": ["_id", "_creationTime"] }],
+
     // Consistency choices that expose real TS concepts:
     "typescript/array-type": "warn",                    // T[] vs Array<T>
     "typescript/consistent-indexed-object-style": "warn", // Record<K,V> vs { [k]: V }

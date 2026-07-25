@@ -16,6 +16,8 @@ import type * as orders from "../orders.js";
 import type * as outbox from "../outbox.js";
 import type * as outboxStatus from "../outboxStatus.js";
 import type * as privateData from "../privateData.js";
+import type * as seed from "../seed.js";
+import type * as seedData from "../seedData.js";
 import type * as ticketStatus from "../ticketStatus.js";
 import type * as tickets from "../tickets.js";
 
@@ -34,6 +36,8 @@ declare const fullApi: ApiFromModules<{
   outbox: typeof outbox;
   outboxStatus: typeof outboxStatus;
   privateData: typeof privateData;
+  seed: typeof seed;
+  seedData: typeof seedData;
   ticketStatus: typeof ticketStatus;
   tickets: typeof tickets;
 }>;
