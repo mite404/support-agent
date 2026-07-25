@@ -1,8 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { api } from "@support-agent/backend/convex/_generated/api";
-import type { SupportConvexClient } from "../src/shared/support-tools";
-import { createSupportTools } from "../src/shared/support-tools";
+import { makeTools, named, recordedCalls } from "./tool-stubs";
 
 // A hit row exactly as `orders.getStatusFor` returns it.
 const shippedOrder = {
@@ -12,37 +11,35 @@ const shippedOrder = {
   updatedAt: 1_700_000_000_000,
 } as const;
 
-// Build both tools wired to stubbed Convex query + mutation. Destructuring the
-// factory's tuple keeps each tool's `run` input shape distinct, so calling
-// `run` typechecks against that tool's own schema.
-function makeTools(id: string, queryResult: unknown, mutationResult: unknown) {
-  const query = vi.fn().mockResolvedValue(queryResult);
-  const mutation = vi.fn().mockResolvedValue(mutationResult);
-  const client: SupportConvexClient = { query, mutation };
-  const [lookupOrderStatus, sendReply] = createSupportTools(id, client);
-  return { lookupOrderStatus, sendReply, query, mutation };
-}
-
-/** Build just the lookup tool wired to a stubbed Convex client. */
+// Build just the lookup tool wired to a stubbed Convex client.
 function makeLookupTool(id: string, queryResult: unknown) {
   const { lookupOrderStatus, query } = makeTools(id, queryResult, null);
   return { lookupOrderStatus, query };
 }
 
+describe("createSupportTools / composition", () => {
+  it("exposes the tools in a stable order", () => {
+    const { lookupOrderStatus, sendReply, createTicket, messageAHuman } = makeTools(
+      "web:user_42",
+      null,
+      null,
+    );
+
+    expect([lookupOrderStatus.name, sendReply.name, createTicket.name, messageAHuman.name]).toEqual(
+      ["lookup_order_status", "send_reply", "create_ticket", "message_a_human"],
+    );
+  });
+});
+
 describe("createSupportTools / lookup_order_status", () => {
   it("scopes the query to the closure id, not to the model input", async () => {
-    const { lookupOrderStatus, query } = makeLookupTool(
-      "web:user_42",
-      shippedOrder,
-    );
+    const { lookupOrderStatus, query } = makeLookupTool("web:user_42", shippedOrder);
 
     await lookupOrderStatus.run({ input: { orderNumber: "1234" } });
 
-    expect(query).toHaveBeenCalledTimes(1);
-    expect(query).toHaveBeenCalledWith(api.orders.getStatusFor, {
-      customerId: "web:user_42",
-      orderNumber: "1234",
-    });
+    expect(recordedCalls(query)).toEqual([
+      [named(api.orders.getStatusFor), { customerId: "web:user_42", orderNumber: "1234" }],
+    ]);
   });
 
   it("maps a found order to a found:true result", async () => {
@@ -67,39 +64,32 @@ describe("createSupportTools / lookup_order_status", () => {
 });
 
 describe("createSupportTools / send_reply", () => {
-  it("exposes the two tools in a stable order", () => {
-    const { lookupOrderStatus, sendReply } = makeTools("web:user_42", null, null);
-
-    expect(lookupOrderStatus.name).toBe("lookup_order_status");
-    expect(sendReply.name).toBe("send_reply");
-  });
-
   it("refuses to send from a non-WhatsApp lane and never touches the outbox", async () => {
     const { sendReply, mutation } = makeTools("web:user_42", null, "msg_1");
 
-    await expect(
-      sendReply.run({ input: { body: "hello from the web" } }),
-    ).rejects.toThrow(/whatsapp/iu);
-    expect(mutation).not.toHaveBeenCalled();
+    await expect(sendReply.run({ input: { body: "hello from the web" } })).rejects.toThrow(
+      /whatsapp/iu,
+    );
+    expect(recordedCalls(mutation)).toEqual([]);
   });
 
   it("enqueues to the outbox scoped to the closure id and returns the message id", async () => {
-    const { sendReply, mutation } = makeTools(
-      "whatsapp:+15550001111",
-      null,
-      "outbox_7",
-    );
+    const { sendReply, mutation } = makeTools("whatsapp:+15550001111", null, "outbox_7");
 
     const result = await sendReply.run({
       input: { body: "Your order has shipped." },
     });
 
-    expect(mutation).toHaveBeenCalledTimes(1);
-    expect(mutation).toHaveBeenCalledWith(api.outbox.enqueue, {
-      conversationKey: "whatsapp:+15550001111",
-      to: "whatsapp:+15550001111",
-      body: "Your order has shipped.",
-    });
+    expect(recordedCalls(mutation)).toEqual([
+      [
+        named(api.outbox.enqueue),
+        {
+          conversationKey: "whatsapp:+15550001111",
+          to: "whatsapp:+15550001111",
+          body: "Your order has shipped.",
+        },
+      ],
+    ]);
     expect(result).toEqual({ enqueued: true, messageId: "outbox_7" });
   });
 });

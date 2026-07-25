@@ -310,8 +310,21 @@ flowchart LR
 
 The same discipline runs the other way through `seedData.ts`, whose row type is derived from
 `Doc<"orders">`, and through `SupportConvexClient`, which is deliberately narrowed to the one query
-and the one mutation the tools use. Narrow enough to satisfy with an object literal in a test, wide
+and the three mutations the tools use - one overload per function, assembled by intersecting the
+escalation module's own slice. Narrow enough to satisfy with an object literal in a test, wide
 enough that the real `ConvexHttpClient` still assigns to it.
+
+The same trick names a status without restating it. `create_ticket` needs the literal `"open"` for
+its output schema, and `"open"` is the backend's word, not the agent's, so the agent asks:
+
+```typescript
+// apps/agent/src/shared/escalation-tools.ts
+type TicketStatus = FunctionArgs<typeof api.tickets.setStatus>["status"];
+
+// `satisfies` keeps the literal type - the output schema stays precise - while
+// still checking the string against the backend's own union.
+const TICKET_OPEN = "open" as const satisfies TicketStatus;
+```
 
 ### Authorization belongs in the closure, not in the schema
 
@@ -338,6 +351,14 @@ run: async ({ input }) => {
 `send_reply` takes the same idea one step further: it throws unless the conversation `id` is on the
 `whatsapp:` lane, so a browser session structurally cannot text a phone. The refusal lives in
 `run`, before any I/O, and it is unit-tested as a pure decision.
+
+The escalation pair shows the third move in the same family: leaving something out. `create_ticket`
+and `message_a_human` take a `subject` and nothing else - no customer id, no conversation key, and
+crucially no ticket id. `message_a_human` escalates the ticket its own `create` call just returned,
+so there is no turn of the conversation in which the model holds a ticket id it could aim somewhere
+else. `tickets.setStatus` does not check ownership, and it does not have to, because no session can
+name a ticket that is not its own. Compare that with an input schema that accepted `ticketId` and
+then had to be defended: the defence is the thing that eventually gets forgotten.
 
 ### Assert on what the user reads, not on what the model thought
 

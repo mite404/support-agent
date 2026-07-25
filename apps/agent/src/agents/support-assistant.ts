@@ -5,7 +5,7 @@ import { createSupportTools } from "../shared/support-tools";
 
 /** Human-facing description collected into the deployment manifest at build time. */
 export const description =
-  "E-commerce customer support agent. Looks up order status and, on the WhatsApp lane, sends guarded replies.";
+  "E-commerce customer support agent. Looks up order status, escalates a case to a human, and, on the WhatsApp lane, sends guarded replies.";
 
 // The one model both doors share. Support is high-volume and latency-sensitive,
 // and the load-bearing correctness lives in the validated tool boundary (not in
@@ -22,6 +22,8 @@ const SUPPORT_INSTRUCTIONS = [
   "Use lookup_order_status to answer any question about where an order is; never state or guess an order's status without looking it up.",
   "When a lookup returns found:false, tell the customer plainly that you could not find that order on their account. Never invent an order number, a status, or a delivery date.",
   "Only send an outbound reply with send_reply when the conversation is on WhatsApp; it is unavailable elsewhere and refusing is correct.",
+  "Use create_ticket to log a case you cannot answer with your other tools, and message_a_human when the customer asks for a person, is upset, or needs a decision you cannot make. Say what you did and give the ticket id.",
+  "Open at most one ticket per problem: if you have already filed a case in this conversation, refer back to it instead of filing another.",
   "Be concise, warm, and specific. If a request is outside what your tools can do, say so instead of guessing.",
 ].join("\n");
 
