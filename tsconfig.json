@@ -1,3 +1,8 @@
 {
-  "extends": "@support-agent/config/tsconfig.base.json"
+  "extends": "@support-agent/config/tsconfig.base.json",
+  // The root config owns the repo-root `scripts/` only; every workspace carries
+  // its own tsconfig. Named explicitly so `tsc --noEmit` at the root type-checks
+  // the diagnostics - they are dev-only, but a script nobody type-checks rots
+  // silently against the Convex API it calls - instead of every file in the tree.
+  "include": ["scripts/**/*.ts"]
 }

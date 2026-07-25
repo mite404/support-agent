@@ -104,6 +104,16 @@ instead.
 
 ## Step 3 - health check before you open a browser
 
+The scripted version of this whole step is one command. It reads the same path by hand below, so
+run it if you want the answer and read on if you want to know why the answer is what it is:
+
+```bash
+FLUE_BASE_URL=http://localhost:3000 bun run check:agent
+```
+
+The `FLUE_BASE_URL` is needed because this runbook starts the agent on `:3000` (so the web app's
+own default reaches it), while the script's default is `flue dev`'s own port, `3583`.
+
 Two `curl` calls prove the agent is up *and* that its lane gate is mounted. Both return HTTP 404;
 the **error type in the body** is the signal, not the status code.
 
@@ -165,6 +175,17 @@ tests, so the demo and the test suite cannot drift):
 | `4567` | `cancelled` | "Your order has been cancelled." |
 
 Re-running is safe: each row is matched on `(customerId, orderNumber)` and patched in place.
+
+To confirm the rows actually landed - read-only, so it is also the safe thing to run when the chat
+answers "I couldn't find that order":
+
+```bash
+bun run check:backend
+```
+
+It asserts every row above against `seedData.ts`, so it fails with the drifting order named rather
+than with a generic "backend down". `bun run probe` prints what each read-only Convex function
+returns instead of asserting, which is the tool for "what does this function actually do?".
 
 ## Step 5 - the catch: your signed-in id is **not** the demo customer
 

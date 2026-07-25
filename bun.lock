@@ -13,9 +13,11 @@
       "devDependencies": {
         "@convex-dev/eslint-plugin": "^2.0.0",
         "@flue/cli": "^1.0.0-beta.9",
+        "@support-agent/backend": "workspace:*",
         "@support-agent/config": "workspace:*",
         "@types/node": "^22.13.14",
         "@typescript-eslint/parser": "^8.65.0",
+        "convex": "catalog:",
         "eslint": "^9",
         "husky": "^9.1.7",
         "lint-staged": "^17.0.7",
