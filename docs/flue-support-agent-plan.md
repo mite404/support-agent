@@ -107,7 +107,8 @@ Four small tables. One job each.
 - **Is:** the thing customers ask about
 - **Fields:** `customerId` · `orderNumber` · `status` · `updatedAt`
 - **Status flow:** `packed` → `shipped` → `delivered` → `cancelled`
-- **Index:** `by_orderNumber`
+- **Index:** `by_customerId_and_orderNumber` - scoping lives in the index, so two customers can
+  share an order number without the lookup colliding
 
 ### 👤 `customers`
 - **Is:** the link between the two channel lanes — **context only, never merges sessions**
