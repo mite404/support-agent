@@ -148,9 +148,13 @@ async function readRecordedMessageIds(
  * public HTTP boundary through `@flue/sdk` - the same door a browser uses - so an
  * eval exercises the deployed contract rather than any runtime internal.
  *
- * A fresh agent instance is minted per `run(...)` unless `instanceId` pins one,
- * so cases never contaminate one another. Evaluate conversation memory only in a
- * harness that deliberately reuses an instance.
+ * A fresh agent instance is minted per `run(...)`, so cases cannot contaminate
+ * one another. Pinning `instanceId` gives that up on purpose: every case then
+ * prompts the same durable conversation, and a later case is graded with the
+ * earlier ones' turns in the model's context. Pin only when the customer scope
+ * demands it - here `customerId` *is* the instance id, so the seeded rows are
+ * reachable no other way - and order the cases so that sharing is harmless.
+ * The guard below catches reuse across processes, never within one run.
  *
  * @param options - which agent to drive and how to reach it.
  * @throws If a pinned instance's conversation already holds messages this

@@ -272,11 +272,14 @@ comes back empty, suspect the token budget before you suspect the agent.
 
 While you are here, be picky about the picture:
 
-- Your own messages sit on the **trailing** edge in the filled bubble variant; the assistant's
-  sit on the **leading** edge in the muted variant. (`apps/web/tests/chat.test.tsx` guards this,
+- Your own messages sit on the **trailing** edge in the `default` bubble variant; the assistant's
+  sit on the **leading** edge in the `muted` variant. (`apps/web/tests/chat.test.tsx` guards this,
   but the test cannot see a broken layout.)
 - The transcript scrolls, and the jump-to-latest button appears when you scroll up.
-- **Send** is disabled while the input is empty and while a reply is in flight.
+- **Send** is disabled while the input is empty or blank, and while a request is being submitted.
+  Not for the whole reply: `Chat.tsx` gates on `status !== "submitted"`, so once the reply starts
+  streaming the button is live again. That is easy to miss only because submitting clears the
+  input, so there is normally nothing to send.
 - The textarea does not resize-jitter as you type.
 - Long replies wrap inside the bubble rather than overflowing it.
 - Light and dark both look right (the header's mode toggle).
