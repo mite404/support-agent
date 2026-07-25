@@ -12,5 +12,16 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "jsdom",
+    // `Chat.tsx` builds its Flue client at module scope, so importing it runs
+    // `@support-agent/env/web` validation before any test body does. Vitest does
+    // not read `apps/web/.env` (measured: the vars are `undefined` without this),
+    // and that file is gitignored anyway - so a render test that relied on it
+    // would pass here and fail in CI. These are throwaway values that satisfy the
+    // schema; nothing in a test may talk to a real deployment.
+    env: {
+      NEXT_PUBLIC_CONVEX_URL: "https://test.convex.cloud",
+      NEXT_PUBLIC_CONVEX_SITE_URL: "https://test.convex.site",
+      NEXT_PUBLIC_FLUE_BASE_URL: "http://localhost:3000",
+    },
   },
 });
