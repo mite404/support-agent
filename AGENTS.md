@@ -21,7 +21,6 @@ These are common instructions for Ethan's agents across all scenarios.
 ## General Guidelines
 
 - Never use the em dash "--". Use plain dash "-" instead.
-- When writing commit messages never auto-add your agent name as co-author.
 - Never manually modify changelog.md files or any files that are marked as auto-generated.
 - When writing or editing Markdown files, keep every physical line at or under 100 columns, wrapping
   longer lines at word boundaries.
@@ -43,19 +42,58 @@ These are common instructions for Ethan's agents across all scenarios.
   get it fixed.
 - Apply the same high standard to engineering excellence: lint, test failures, and test flakiness.
   If you see one, even if it is not caused by what you are working on right now, still get it fixed.
-- Let's always work with atomic commits. Each commit should tell part of a story working to build a
-  feature or fix a bug.
-  One commit with hundreds or thousands of lines of code changes is hard for anyone to track.
 - Always opt for writing files in the same way: imports, variable declarations, prep data to work
   with, helper fns / pure fns, the main orchestration at the bottom.
   Work leafs to root and follow the functional programming principles from Grokking Simplicity:
   data, calculations, actions.
-- Public/exported functions and interface members get JSDoc (`/** */`) so editor tooltips carry the
-  contract.
+- Public/exported functions and interface members get JSDoc (`/** */`) so editor
+  tool tips carry the contract.
   Include `@throws` wherever the function throws, and `@param`/`@returns` only where they say
   something the type does not.
   Do not JSDoc private helpers or pure data-shape types - leave those as `//` comments; restating a
   type in JSDoc just invites drift.
+- Annotate Data Flow where appropriate - add a quick comment on each line showing
+  what type goes in and what comes out.
+
+```typescript
+async () => {
+    const raw = await getVoicesFromFirebase();   // → Record<string, unknown>[]
+    return raw.map(item => Voice.fromJSON(item)); // → Voice[]
+```
+
+---
+
+## Commits
+
+Messages follow [the seven rules](https://cbea.ms/git-commit/), with one deliberate deviation
+noted below.
+
+**Scope.** Atomic. Each commit tells one part of the story of building a feature or fixing a bug.
+One commit with hundreds or thousands of changed lines is hard for anyone to track. If the subject
+line will not fit in 50 characters, that is usually the commit doing two things - split it.
+
+**Subject line**
+
+- Conventional Commits prefix: `feat:` `fix:` `refactor:` `test:` `docs:` `style:` `chore:`.
+- Imperative mood. The subject must complete the sentence "If applied, this commit will ___".
+  Write `scope order lookups by customer`, not `scoped`, `scopes`, or `order lookup scoping`.
+- 50 characters including the prefix. Never past 72.
+- No trailing period.
+- Lowercase after the prefix. This is the deviation from rule 3 (capitalize the subject); the
+  prefix already marks where the subject starts, and this repo's history is lowercase.
+
+**Body**
+
+- Blank line after the subject, always. Git tooling treats the first line as the subject and
+  misbehaves without the separator.
+- Wrap at 72 columns. This is not the 100-column markdown rule above: a commit message is not a
+  markdown file, and 72 leaves room for the four-space indent `git log` adds.
+- One `-` bullet per change. Reach for a prose paragraph only when a decision needs a
+  because-clause that no bullet can hold.
+- Say what and why. Never how - the diff already shows how.
+- Skip the body entirely when the subject fully covers the change.
+
+**Never** add an agent name as co-author.
 
 ---
 
