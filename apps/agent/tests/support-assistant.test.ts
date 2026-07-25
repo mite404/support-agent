@@ -48,12 +48,9 @@ describe("support-assistant / definition", () => {
       env: {},
     });
 
-    expect(config.model).toBe("anthropic/claude-haiku-4-5");
+    expect(config.model).toBe("openrouter/moonshotai/kimi-k2.6");
     expect(config.instructions).toContain("Never invent");
     expect(config.description).toBe(description);
-    expect(config.tools?.map((tool) => tool.name)).toEqual([
-      "lookup_order_status",
-      "send_reply",
-    ]);
+    expect(config.tools?.map((tool) => tool.name)).toEqual(["lookup_order_status", "send_reply"]);
   });
 });

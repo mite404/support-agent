@@ -10,7 +10,7 @@ export const description =
 // The one model both doors share. Support is high-volume and latency-sensitive,
 // and the load-bearing correctness lives in the validated tool boundary (not in
 // model cleverness), so the small, fast model is the right default here.
-const SUPPORT_MODEL = "anthropic/claude-haiku-4-5";
+const SUPPORT_MODEL = "openrouter/moonshotai/kimi-k2.6";
 
 // The agent's whole personality and its guardrails. The anti-fabrication rule is
 // the load-bearing line: `lookup_order_status` answers `found:false` for an order
