@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "flue build --target node",
     "check-types": "tsc --noEmit",
     "test": "vitest run",
     "evals": "vitest run --config vitest.evals.config.ts",

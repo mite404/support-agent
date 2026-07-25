@@ -89,7 +89,14 @@ jobs:
   evals:
     name: evals (live model)
     needs: [verify, eval-gate]
-    if: needs.eval-gate.outputs.has-model-key == 'true'
+    # Push events only, on top of the key check. A `pull_request` from a branch
+    # in this repo receives the real secrets AND runs the workflow definition as
+    # it exists on the PR head - so a PR could edit this file or the eval itself
+    # to drain or exfiltrate a live, billable key, reviewed after the fact. Fork
+    # PRs were always safe (empty secrets, so the gate below skips them); this
+    # closes the same-repo hole. Post-merge coverage on `main` is the trade, and
+    # the right one while the key is real and capped only by a credit ceiling.
+    if: github.event_name == 'push' && needs.eval-gate.outputs.has-model-key == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
