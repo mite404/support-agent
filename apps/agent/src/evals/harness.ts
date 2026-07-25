@@ -1,14 +1,20 @@
 // flue-blueprint: tooling/vitest-evals@1
-import { createFlueClient } from "@flue/sdk";
+import { createFlueClient, FlueApiError } from "@flue/sdk";
 import { createHarness, toJsonValue } from "vitest-evals";
 
-import type { AgentPromptResponse, FlueConversationMessage } from "@flue/sdk";
+import type { AgentPromptResponse, FlueClient, FlueConversationMessage } from "@flue/sdk";
 import type { JsonValue, TranscriptEvent, UsageSummary } from "vitest-evals";
 
 /** How an eval run reaches one agent of a running Flue application. */
 export interface FlueAgentHarnessOptions {
   /** Agent name as the Flue app registers it, e.g. `support-assistant`. */
   agentName: string;
+  /**
+   * Agent instance to prompt. Defaults to a fresh `eval-<uuid>` per run, so
+   * cases cannot contaminate one another. Pin it only when the id is itself
+   * load-bearing - when a route gate or a tool's data scope reads it.
+   */
+  instanceId?: string;
   /** Base URL of the running app. Falls back to `FLUE_BASE_URL`, then to `flue dev`'s own default. */
   baseUrl?: string;
   /** Bearer token, when the agent's route is protected. */
@@ -99,14 +105,41 @@ function toUsageSummary(response: AgentPromptResponse): UsageSummary {
   };
 }
 
+// The messages an instance's conversation already holds, read before the prompt
+// so the transcript below can be narrowed to the turn this case produced. A
+// pinned `instanceId` keeps one conversation across cases and across eval runs,
+// and "the tools this case called" must not silently include an earlier one's.
+//
+// A conversation's event stream is created by the instance's first prompt, so a
+// never-prompted instance answers 404 here. That is "no messages yet", not a
+// failure; any other error still propagates.
+async function readRecordedMessageIds(
+  client: FlueClient,
+  agentName: string,
+  instanceId: string,
+  signal: AbortSignal | undefined,
+): Promise<Set<string>> {
+  try {
+    const snapshot = await client.agents.history(agentName, instanceId, {
+      signal,
+    });
+    return new Set(snapshot.messages.map((message) => message.id));
+  } catch (error) {
+    if (error instanceof FlueApiError && error.status === 404) {
+      return new Set();
+    }
+    throw error;
+  }
+}
+
 /**
  * Builds a `vitest-evals` harness that drives one agent across the application's
  * public HTTP boundary through `@flue/sdk` - the same door a browser uses - so an
  * eval exercises the deployed contract rather than any runtime internal.
  *
- * A fresh agent instance is minted per `run(...)`, so cases never contaminate one
- * another. Evaluate conversation memory only in a harness that deliberately
- * reuses an instance.
+ * A fresh agent instance is minted per `run(...)` unless `instanceId` pins one,
+ * so cases never contaminate one another. Evaluate conversation memory only in a
+ * harness that deliberately reuses an instance.
  *
  * @param options - which agent to drive and how to reach it.
  */
@@ -120,7 +153,13 @@ export function createFlueAgentHarness(options: FlueAgentHarnessOptions) {
   return createHarness<string, string>({
     name: `flue-${options.agentName}-agent`,
     run: async ({ input, signal }) => {
-      const instanceId = `eval-${crypto.randomUUID()}`;
+      const instanceId = options.instanceId ?? `eval-${crypto.randomUUID()}`;
+      const carriedOver = await readRecordedMessageIds(
+        client,
+        options.agentName,
+        instanceId,
+        signal,
+      );
       // The awaited prompt settles only once its canonical conversation records
       // are persisted, so the history read below sees the completed turn.
       const invocation = await client.agents.prompt(options.agentName, instanceId, {
@@ -130,10 +169,11 @@ export function createFlueAgentHarness(options: FlueAgentHarnessOptions) {
       const history = await client.agents.history(options.agentName, instanceId, {
         signal,
       });
+      const turn = history.messages.filter((message) => !carriedOver.has(message.id));
 
       return {
         output: invocation.result.text,
-        events: history.messages.flatMap(toTranscriptEvents),
+        events: turn.flatMap((message) => toTranscriptEvents(message)),
         usage: toUsageSummary(invocation.result),
       };
     },
