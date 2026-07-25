@@ -4,5 +4,5 @@
     "lib": ["ESNext", "DOM"],
     "noEmit": true
   },
-  "include": ["src", "tests"]
+  "include": ["src", "tests", "vitest.config.ts", "vitest.evals.config.ts"]
 }
