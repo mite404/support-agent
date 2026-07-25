@@ -11,9 +11,11 @@ const { useFlueAgent } = vi.hoisted(() => ({
   useFlueAgent: vi.fn<(options: UseFlueAgentOptions) => UseFlueAgentResult>(),
 }));
 
-// Partial mock on purpose: only the transport-owning hook is faked. `FlueProvider`
-// stays real, so the context handshake between provider and consumer is still
-// exercised - a provider that stopped supplying its client would fail here.
+// Partial mock on purpose: only the transport-owning hook is faked, so every
+// other export - and the whole primitive composition below it - stays real.
+// Note what this does NOT cover: faking `useFlueAgent` removes the only consumer
+// of `FlueProvider`'s context, so deleting the provider from `Chat` leaves these
+// cases green. The provider-to-consumer handshake is unexercised here.
 vi.mock("@flue/react", async (importOriginal) => ({
   ...(await importOriginal<typeof FlueReact>()),
   useFlueAgent,

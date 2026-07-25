@@ -60,13 +60,24 @@ way:
 
 ### Season 3: the stretch reel
 
-With the gate in place, two pieces of held-back work could land safely, because the layers that
-would catch a regression were finally running:
+With the gate in place, held-back work could land safely, because the layers that would catch a
+regression were finally running:
 
 | Work | What landed | Where to look |
 |---|---|---|
 | Escalation | `create_ticket` and `message_a_human` over the existing `tickets` mutations | `5ed028f` |
 | Render sweep | Every one of the 17 `packages/ui` components mounted in jsdom | `e3713df` |
+| This document | The full five-section build-out you are reading | `b79c70b` |
+| Diagnostics | Three read-only probes answering "is the backend down, or is my code wrong?" | `abe92b7` |
+
+Those probes are worth knowing before you need them. `bun run check:backend` asks whether the
+deployment is reachable and a seeded order still round-trips; `bun run probe` calls every
+read-only Convex function with realistic arguments and prints what the live deployment actually
+returns; `bun run check:agent` asks whether the Flue process is up. All three are read-only by
+construction - `probe-functions.ts` is typed to accept only query references, so handing it a
+mutation is a compile error - and all three exit non-zero on failure, so they are safe to put in
+a gate. When a session is stuck, they separate "the backend is down" from "my code is wrong" in
+one command, which is otherwise twenty minutes of guessing.
 
 The sweep is the clearest proof the model works: `packages/ui` went from 6 render tests to 91, and
 the sweep found `DropdownMenuLabel` requiring a parent context it was never given in a test - the
@@ -223,8 +234,10 @@ schema, a Valibot output schema, and a `run` that holds the authorization.
 
 `createSupportTools` returns them as a **tuple**, not an array, so each position keeps its own tool
 type instead of collapsing into a union of `run` signatures. The escalation pair lives in its own
-module (`escalation-tools.ts`) with its own narrow Convex slice, which is both a readability choice
-and how each file stays under the 300-line lint ceiling.
+module (`escalation-tools.ts`) with its own narrow Convex slice. That split is readability and
+nothing more: no `max-lines` rule is configured in `.oxlintrc.json`, so inlining the pair would
+have compiled and linted fine. Escalation is simply its own capability over its own slice of the
+backend, and reads better with a seam.
 
 ### From transcript to bubbles
 

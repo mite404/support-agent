@@ -32,26 +32,14 @@ describe("Button", () => {
     expect(screen.getByRole("button", { name: "Send" }).dataset.slot).toBe("button");
   });
 
-  // `buttonVariants` has six variants and eight sizes. A missing key in either
-  // map yields `undefined` inside `cn` rather than an error, so the render is
-  // the only thing that proves every branch a caller can select actually maps.
-  test.each(["default", "outline", "secondary", "ghost", "destructive", "link"] as const)(
-    "mounts the %s variant",
-    (variant) => {
-      render(<Button variant={variant}>Retry</Button>);
-
-      expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
-    },
-  );
-
-  test.each(["default", "xs", "sm", "lg", "icon", "icon-xs", "icon-sm", "icon-lg"] as const)(
-    "mounts the %s size",
-    (size) => {
-      render(<Button size={size}>Retry</Button>);
-
-      expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
-    },
-  );
+  // No per-variant cases here, deliberately. `buttonVariants` is a cva map with
+  // six variants and eight sizes, and an emptied key yields `undefined` inside
+  // `cn` rather than an error - so a mount-and-find assertion passes just as well
+  // against a fully broken map, which is what an earlier version of this file did
+  // for fourteen cases. Unlike `Bubble` and `Attachment`, `Button` exposes no
+  // per-variant `data-*` attribute to pin, so there is nothing cheap and honest to
+  // assert. Covering this properly means asserting the emitted class tokens; until
+  // then the mount case above is the honest extent of the coverage.
 
   // The chat composer disables Send while a turn is in flight
   // (`apps/web/src/app/support/Chat.tsx`). Base UI's Button owns that mapping,
